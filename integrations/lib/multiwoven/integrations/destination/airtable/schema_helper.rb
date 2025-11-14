@@ -29,7 +29,27 @@ module Multiwoven
             options = field.fetch("options", {})
 
             schema = determine_schema(original_type, options)
+
+            # Attach Airtable-specific metadata helpful for UI mapping
+            # e.g., for linked records include the linked table id
+            attach_airtable_metadata!(schema, original_type, options)
+
             [name, schema]
+          end
+
+          def attach_airtable_metadata!(schema, original_type, options)
+            case original_type
+            when "multipleRecordLinks"
+              linked_table_id = options["linkedTableId"]
+              schema["x_airtable"] = { "linked_table_id" => linked_table_id } if linked_table_id
+            when "multipleLookupValues", "lookup", "rollup"
+              record_link_field_id = options["recordLinkFieldId"]
+              field_in_linked_table = options["fieldIdInLinkedTable"]
+              schema["x_airtable"] = {
+                "via_record_link_field_id" => record_link_field_id,
+                "field_in_linked_table" => field_in_linked_table
+              }.compact if record_link_field_id || field_in_linked_table
+            end
           end
 
           def determine_schema(original_type, options)

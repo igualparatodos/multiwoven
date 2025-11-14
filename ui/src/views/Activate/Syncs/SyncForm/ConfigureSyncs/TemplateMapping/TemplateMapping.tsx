@@ -19,11 +19,13 @@ import StaticOptions from './StaticOptions';
 import TemplateOptions from './TemplateOptions';
 import useQueryWrapper from '@/hooks/useQueryWrapper';
 import { SyncsConfigurationForTemplateMapping } from '@/views/Activate/Syncs/types';
+import { RJSFSchema } from '@rjsf/utils';
 
 export enum OPTION_TYPE {
   STANDARD = 'standard',
   STATIC = 'static',
   TEMPLATE = 'template',
+  CUSTOM_MAPPING = 'custom_mapping',
 }
 
 type TemplateMappingProps = {
@@ -36,10 +38,14 @@ type TemplateMappingProps = {
     type: 'model' | 'destination',
     value: string,
     mappingType?: OPTION_TYPE,
+    options?: Record<string, unknown>,
   ) => void;
   mappingId: number;
   mappingType: OPTION_TYPE;
   selectedConfig?: string;
+  destinationName?: string;
+  destinationField?: string;
+  destinationSchema?: RJSFSchema;
 };
 
 const TabName = ({ title, handleActiveTab }: { title: string; handleActiveTab: () => void }) => (
@@ -68,8 +74,11 @@ const TemplateMapping = ({
   selectedConfig = '',
   fieldType,
   mappingType,
+  destinationName,
+  destinationField,
+  destinationSchema,
 }: TemplateMappingProps): JSX.Element => {
-  const [activeTab, setActiveTab] = useState(OPTION_TYPE.STANDARD);
+  const [activeTab, setActiveTab] = useState(mappingType || OPTION_TYPE.STANDARD);
 
   // pre-defined value incase of edit
   const [selectedTemplate, setSelectedTemplate] = useState(
@@ -81,6 +90,46 @@ const TemplateMapping = ({
   const [selectedStaticOptionValue, setSelectedStaticOptionValue] = useState<string | boolean>(
     mappingType === OPTION_TYPE.STATIC ? selectedConfig : '',
   );
+
+  // Custom mapping state (Airtable Link)
+  const [linkSourceColumn, setLinkSourceColumn] = useState(
+    mappingType === OPTION_TYPE.CUSTOM_MAPPING ? selectedConfig : '',
+  );
+  const [linkedTableId, setLinkedTableId] = useState('');
+  const [matchField, setMatchField] = useState('');
+  const [baseIdOverride, setBaseIdOverride] = useState('');
+  const [apiKeyOverride, setApiKeyOverride] = useState('');
+
+  const getSubSchema = (schema: RJSFSchema | undefined, path: string | undefined): RJSFSchema | undefined => {
+    if (!schema || !path) return undefined;
+    const segments = path.split('.')
+      .filter((seg) => seg !== '' && seg !== '0' && seg !== '[0]');
+    let current: RJSFSchema | undefined = schema;
+    for (const seg of segments) {
+      if (!current) return undefined;
+      if (current.type === 'object' && current.properties && (current.properties as any)[seg]) {
+        current = (current.properties as any)[seg] as RJSFSchema;
+      } else if (current.type === 'array' && current.items) {
+        current = current.items as RJSFSchema;
+        // retry same segment on items
+        if (current?.type === 'object' && current.properties && (current.properties as any)[seg]) {
+          current = (current.properties as any)[seg] as RJSFSchema;
+        }
+      } else {
+        return undefined;
+      }
+    }
+    return current;
+  };
+
+  const isArrayField = (schema: RJSFSchema | undefined, path?: string): boolean => {
+    if (!schema || !path) return false;
+    const sub = getSubSchema(schema, path);
+    if (!sub) return false;
+    const t = sub.type as string | string[] | undefined;
+    if (!t) return false;
+    return Array.isArray(t) ? t.includes('array') : t === 'array';
+  };
 
   const { data } = useQueryWrapper<SyncsConfigurationForTemplateMapping, Error>(
     ['syncsConfiguration'],
@@ -106,6 +155,15 @@ const TemplateMapping = ({
   const applyConfigs = () => {
     if (activeTab === OPTION_TYPE.TEMPLATE) {
       handleUpdateConfig(mappingId, fieldType, selectedTemplate, activeTab);
+      setIsPopOverOpen(false);
+    } else if (activeTab === OPTION_TYPE.CUSTOM_MAPPING) {
+      const options: Record<string, unknown> = {
+        linked_table_id: linkedTableId,
+        match_field: matchField,
+      };
+      if (baseIdOverride) options.base_id = baseIdOverride;
+      if (apiKeyOverride) options.api_key = apiKeyOverride;
+      handleUpdateConfig(mappingId, fieldType, linkSourceColumn, activeTab, options);
       setIsPopOverOpen(false);
     } else {
       handleUpdateConfig(mappingId, fieldType, selectedStaticOptionValue.toString(), activeTab);
@@ -179,6 +237,12 @@ const TemplateMapping = ({
                       title='Template'
                       handleActiveTab={() => setActiveTab(OPTION_TYPE.TEMPLATE)}
                     />
+                    {destinationName === 'Airtable' && isArrayField(destinationSchema, destinationField) && (
+                      <TabName
+                        title='Airtable Link'
+                        handleActiveTab={() => setActiveTab(OPTION_TYPE.CUSTOM_MAPPING)}
+                      />
+                    )}
                   </TabList>
                   <TabIndicator />
                 </Tabs>
@@ -213,9 +277,43 @@ const TemplateMapping = ({
                   setSelectedTemplate={setSelectedTemplate}
                 />
               )}
+              {activeTab === OPTION_TYPE.CUSTOM_MAPPING && (
+                <Box display='flex' flexDirection='column' gap='12px'>
+                  <Text size='xs' fontWeight='semibold'>Select source column</Text>
+                  <Columns
+                    columnOptions={columnOptions}
+                    showFilter
+                    onSelect={(value) => setLinkSourceColumn(value)}
+                    fieldType={fieldType}
+                  />
+                  <Text size='xs' fontWeight='semibold'>Linked table ID</Text>
+                  <Input
+                    placeholder='tblXXXXXXXXXXXXXX'
+                    value={linkedTableId}
+                    onChange={(e) => setLinkedTableId(e.target.value)}
+                  />
+                  <Text size='xs' fontWeight='semibold'>Match field in linked table</Text>
+                  <Input
+                    placeholder='Name'
+                    value={matchField}
+                    onChange={(e) => setMatchField(e.target.value)}
+                  />
+                  <Text size='xs' color='black.200'>Optional overrides</Text>
+                  <Input
+                    placeholder='Base ID override (appXXXXXXXX)'
+                    value={baseIdOverride}
+                    onChange={(e) => setBaseIdOverride(e.target.value)}
+                  />
+                  <Input
+                    placeholder='API key override (pat...)'
+                    value={apiKeyOverride}
+                    onChange={(e) => setApiKeyOverride(e.target.value)}
+                  />
+                </Box>
+              )}
             </Box>
           </Stack>
-          {(activeTab === OPTION_TYPE.STATIC || activeTab === OPTION_TYPE.TEMPLATE) && (
+          {(activeTab === OPTION_TYPE.STATIC || activeTab === OPTION_TYPE.TEMPLATE || activeTab === OPTION_TYPE.CUSTOM_MAPPING) && (
             <Box display='flex' width='100%' justifyContent='flex-end'>
               <Button onClick={applyConfigs} minWidth={0} width='auto'>
                 Apply

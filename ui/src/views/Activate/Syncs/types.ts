@@ -56,6 +56,7 @@ export type FieldMap = {
   to: string;
   mapping_type: string;
   isRequired?: boolean;
+  options?: Record<string, unknown>;
 };
 
 export type SyncsConfigurationForTemplateMapping = {

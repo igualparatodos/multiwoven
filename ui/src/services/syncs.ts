@@ -20,6 +20,15 @@ export const getCatalog = (
     url: `/connectors/${connectorId}/discover?refresh=${refresh}`,
   });
 
+export const getAirtableTableFields = (
+  connectorId: string,
+  tableId: string,
+): Promise<ApiResponse<{ data: { table_id: string; fields: Array<{ id: string; name: string; type: string }> } }>> =>
+  multiwovenFetch<null, ApiResponse<{ data: { table_id: string; fields: Array<{ id: string; name: string; type: string }> } }>>({
+    method: 'get',
+    url: `/connectors/${connectorId}/airtable_table_fields?table_id=${encodeURIComponent(tableId)}`,
+  });
+
 export const createSync = (payload: CreateSyncPayload): Promise<ApiResponse<CreateSyncResponse>> =>
   multiwovenFetch<CreateSyncPayload, ApiResponse<CreateSyncResponse>>({
     method: 'post',

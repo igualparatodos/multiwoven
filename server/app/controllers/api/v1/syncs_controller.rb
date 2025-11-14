@@ -155,6 +155,7 @@ module Api
                                         :template,
                                         :field_type,
                                         :hide_embedding,
+                                        { options: {} },
                                         { embedding_config: %i[mode model api_key] }
                                       ])
 

@@ -77,7 +77,8 @@ const MapFields = ({
     id: number,
     type: 'model' | 'destination' | 'custom',
     value: string,
-    mappingType = OPTION_TYPE.STANDARD,
+    mappingType: OPTION_TYPE = OPTION_TYPE.STANDARD,
+    options?: Record<string, unknown>,
   ) => {
     const fieldsClone = [...fields];
 
@@ -91,6 +92,7 @@ const MapFields = ({
         ...fieldsClone[id],
         from: value,
         mapping_type: mappingType,
+        options: options ? { ...(fieldsClone[id].options as Record<string, unknown>), ...options } : fieldsClone[id].options,
       };
     }
 
@@ -165,7 +167,10 @@ const MapFields = ({
             disabledOptions={mappedColumns}
             onChange={handleOnChange}
             isDisabled={!stream}
-            selectedConfigOptions={configuration}
+            selectedConfigOptions={fields}
+            destinationName={destination?.attributes?.connector_name}
+            destinationSchema={stream?.json_schema}
+            destinationId={destination?.id}
           />
           <Box width='80px' padding='20px' position='relative' top='8px' color='gray.600'>
             <ArrowRightIcon />
@@ -178,8 +183,11 @@ const MapFields = ({
             options={destinationColumns}
             onChange={handleOnChange}
             isDisabled={!stream || isRequired}
-            selectedConfigOptions={configuration}
+            selectedConfigOptions={fields}
             handleRefreshCatalog={handleRefreshCatalog}
+            destinationName={destination?.attributes?.connector_name}
+            destinationSchema={stream?.json_schema}
+            destinationId={destination?.id}
           />
           <Box
             py='20px'

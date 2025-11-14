@@ -1,14 +1,18 @@
 # frozen_string_literal: true
 
+require_relative "destination_handlers/registry"
+
 module ReverseEtl
   module Transformers
     class UserMapping < Base
-      attr_accessor :mappings, :record, :destination_data
+      attr_accessor :mappings, :record, :destination_data, :preload_indexes
 
       def transform(sync, sync_record)
         @mappings = sync.configuration
         @record = sync_record.record
         @destination_data = {}
+        @sync = sync
+        @preload_indexes = preload_indexes || {}
 
         if mappings.is_a?(Array)
           transform_record_v2
@@ -51,6 +55,8 @@ module ReverseEtl
             template_mapping(mapping)
           when "vector"
             vector_mapping(mapping)
+          when "custom_mapping"
+            custom_mapping(mapping)
           end
         end
       end
@@ -99,6 +105,21 @@ module ReverseEtl
         extract_destination_mapping(dest_keys, rendered_text)
       end
 
+      def custom_mapping(mapping)
+        connector_name = @sync.destination.connector_name
+        handler = ReverseEtl::Transformers::DestinationHandlers::Registry.handler_for(connector_name)
+
+        result = handler.transform_custom_mapping(mapping, record, {
+          sync: @sync,
+          preload_indexes: @preload_indexes
+        })
+
+        return unless result.present?
+
+        dest_keys = mapping[:to].split(".")
+        extract_destination_mapping(dest_keys, result)
+      end
+
       def extract_destination_mapping(dest_keys, mapped_destination_value)
         current = destination_data
 
@@ -119,6 +140,8 @@ module ReverseEtl
             current = current[key]
           end
         end
+
+        current
       end
 
       def set_value(current, key, value, is_array)
