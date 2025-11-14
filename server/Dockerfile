@@ -118,7 +118,9 @@ COPY integrations /integrations
 
 # Install application gems using server Gemfile
 COPY server/Gemfile server/Gemfile.lock ./
-RUN bundle install && \
+# Temporarily disable deployment mode to allow Gemfile.lock updates
+RUN bundle config set --local frozen false && \
+    bundle install && \
     rm -rf ~/.bundle/ "${BUNDLE_PATH}"/ruby/*/cache "${BUNDLE_PATH}"/ruby/*/bundler/gems/*/.git && \
     bundle exec bootsnap precompile --gemfile
 
