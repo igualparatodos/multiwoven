@@ -85,36 +85,62 @@ smtp_address: email-smtp.sa-east-1.amazonaws.com
 ### 2. GitHub Actions CI/CD
 
 #### Workflow: `build-ecr.yml`
-**Purpose:** Build and push custom Multiwoven image to AWS ECR
+**Purpose:** Build and push custom Multiwoven server and UI images to AWS ECR
 
 **Triggers:**
 - Push to `main` branch
-- Changes in `server/**` directory
-- Changes to workflow file itself
+- Changes in `server/**`, `ui/**`, or workflow file
 
+**Architecture:**
+Two parallel jobs building separate images:
+
+##### Job 1: Build Server Image
 **Process:**
 1. Checkout code
 2. Configure AWS credentials via OIDC (role: `arn:aws:iam::992382838579:role/github`)
 3. Login to ECR
 4. Create ECR repository if needed (`multiwoven-server`)
 5. Build Docker image from `server/Dockerfile`
-6. Push with three tags:
-   - `latest` - Always points to the most recent build
-   - `<git-sha-short>` - Git commit SHA (first 7 chars)
-   - `<timestamp>` - Build timestamp (YYYYMMDD-HHMMSS)
+6. Push with three tags: `latest`, `<git-sha>`, `<timestamp>`
 
 **Docker Build:**
 - **Context:** Root directory (`.`)
 - **Dockerfile:** `server/Dockerfile`
-- **Cache:** GitHub Actions cache for faster rebuilds
-- **Provenance:** Disabled for compatibility
+- **Build time:** ~8 minutes
+- **Includes:** Custom Rails initializers baked into image
+
+##### Job 2: Build UI Image
+**Process:**
+1. Checkout code
+2. Configure AWS credentials via OIDC
+3. Login to ECR
+4. Create ECR repository if needed (`multiwoven-ui`)
+5. Build Docker image from `ui/Dockerfile`
+6. Push with three tags: `latest`, `<git-sha>`, `<timestamp>`
+
+**Docker Build:**
+- **Context:** `./ui` directory
+- **Dockerfile:** `ui/Dockerfile`
+- **Build time:** ~2-3 minutes
+- **Optimization:** `CYPRESS_INSTALL_BINARY=0` to skip Cypress binary download (testing framework not needed in production)
 
 **Output Example:**
 ```
+Server:
 992382838579.dkr.ecr.sa-east-1.amazonaws.com/multiwoven-server:latest
-992382838579.dkr.ecr.sa-east-1.amazonaws.com/multiwoven-server:2ac1ae5
-992382838579.dkr.ecr.sa-east-1.amazonaws.com/multiwoven-server:20251113-203000
+992382838579.dkr.ecr.sa-east-1.amazonaws.com/multiwoven-server:a45ca27
+
+UI:
+992382838579.dkr.ecr.sa-east-1.amazonaws.com/multiwoven-ui:latest
+992382838579.dkr.ecr.sa-east-1.amazonaws.com/multiwoven-ui:a45ca27
 ```
+
+**Benefits:**
+- ✅ Complete control over both server and UI components
+- ✅ Consistent versioning via git SHA tags
+- ✅ Parallel builds for faster CI/CD
+- ✅ Both images use igual branding and customizations
+- ✅ Cache optimization for faster rebuilds
 
 ### 3. Deployment Architecture
 
@@ -172,17 +198,22 @@ Custom initializers are committed to this fork and baked into the Docker image d
 - ✅ Faster pod startup (no init container delay)
 - ✅ Portable (image is self-contained)
 
-**To Deploy Custom Image:**
-1. Merge changes to `main` → CI builds image
+**To Deploy Custom Images:**
+1. Merge changes to `main` → CI builds both server and UI images
 2. Update `kubernetes/production/data/multiwoven/values.yaml`:
    ```yaml
    multiwovenServer:
      image:
        repository: 992382838579.dkr.ecr.sa-east-1.amazonaws.com/multiwoven-server
-       tag: <git-sha-or-latest>
+       tag: latest  # or specific git-sha
+   
+   multiwovenUI:
+     image:
+       repository: 992382838579.dkr.ecr.sa-east-1.amazonaws.com/multiwoven-ui
+       tag: latest  # or specific git-sha
    ```
-3. Remove init container section from `deployments/server.yaml`
-4. ArgoCD sync
+3. ArgoCD sync
+4. Verify deployment health
 
 ## Development Workflow
 
@@ -275,11 +306,24 @@ git push origin main
 
 ## Version History
 
+- **2025-11-18:** Extended CI/CD to build UI image
+  - Added parallel UI build job to workflow
+  - Created `multiwoven-ui` ECR repository
+  - Optimized UI Dockerfile (skip Cypress binary)
+  - Both server and UI now use custom igual ECR images
+  - Updated Kubernetes values.yaml to use custom UI image
+
+- **2025-11-17:** Database permissions fix
+  - Granted full PostgreSQL permissions to `multiwoven` user
+  - Resolved schema_migrations permission errors
+  - Enabled email verification (`USER_EMAIL_VERIFICATION=true`)
+
 - **2025-11-13:** Initial fork with custom initializers
   - Disabled HostAuthorization for ALB health checks
   - Added email domain restrictions (`@igual.com` only)
   - Fixed email verification URLs (absolute HTTPS links)
-  - Created GitHub Actions workflow for ECR builds
+  - Created GitHub Actions workflow for server ECR builds
+  - Migrated from init container to baked-in initializers
 
 ## Maintainers
 
