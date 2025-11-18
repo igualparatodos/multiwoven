@@ -8,7 +8,8 @@ WORKDIR /app
 # Copy package.json and package-lock.json (or yarn.lock if using Yarn)
 COPY package*.json ./
 
-# Install dependencies
+# Install dependencies (skip Cypress binary download for faster builds)
+ENV CYPRESS_INSTALL_BINARY=0
 RUN npm install
 
 # Copy the rest of your application code
