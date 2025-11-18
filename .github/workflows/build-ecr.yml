@@ -5,15 +5,17 @@ on:
     branches: [main]
     paths:
       - 'server/**'
+      - 'ui/**'
       - '.github/workflows/build-ecr.yml'
 
 env:
   AWS_REGION: sa-east-1
-  ECR_REPOSITORY: multiwoven-server
+  ECR_REPOSITORY_SERVER: multiwoven-server
+  ECR_REPOSITORY_UI: multiwoven-ui
   AWS_ACCOUNT_ID: 992382838579
 
 jobs:
-  build-and-push:
+  build-and-push-server:
     name: Build and Push Multiwoven Server to ECR
     runs-on: ubuntu-latest
 
@@ -38,16 +40,16 @@ jobs:
       - name: Check and create ECR repository if needed
         run: |
           # Check if repository exists
-          if ! aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }} 2>/dev/null; then
-            echo "ECR repository ${{ env.ECR_REPOSITORY }} does not exist. Creating..."
+          if ! aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY_SERVER }} --region ${{ env.AWS_REGION }} 2>/dev/null; then
+            echo "ECR repository ${{ env.ECR_REPOSITORY_SERVER }} does not exist. Creating..."
             aws ecr create-repository \
-              --repository-name ${{ env.ECR_REPOSITORY }} \
+              --repository-name ${{ env.ECR_REPOSITORY_SERVER }} \
               --region ${{ env.AWS_REGION }} \
               --image-scanning-configuration scanOnPush=true \
               --encryption-configuration encryptionType=AES256
-            echo "ECR repository ${{ env.ECR_REPOSITORY }} created successfully"
+            echo "ECR repository ${{ env.ECR_REPOSITORY_SERVER }} created successfully"
           else
-            echo "ECR repository ${{ env.ECR_REPOSITORY }} already exists"
+            echo "ECR repository ${{ env.ECR_REPOSITORY_SERVER }} already exists"
           fi
 
       - name: Set up Docker Buildx
@@ -66,25 +68,93 @@ jobs:
           file: server/Dockerfile
           push: true
           tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.sha_short }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.timestamp }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_SERVER }}:latest
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_SERVER }}:${{ steps.meta.outputs.sha_short }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_SERVER }}:${{ steps.meta.outputs.timestamp }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
 
       - name: Output image URIs
         run: |
-          echo "✅ Image pushed successfully!"
+          echo "✅ Server image pushed successfully!"
           echo ""
-          echo "📦 Image URIs:"
-          echo "  - ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest"
-          echo "  - ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.sha_short }}"
-          echo "  - ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.timestamp }}"
+          echo "📦 Server Image URIs:"
+          echo "  - ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_SERVER }}:latest"
+          echo "  - ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_SERVER }}:${{ steps.meta.outputs.sha_short }}"
+          echo "  - ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_SERVER }}:${{ steps.meta.outputs.timestamp }}"
+
+  build-and-push-ui:
+    name: Build and Push Multiwoven UI to ECR
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/github
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Check and create ECR repository if needed
+        run: |
+          # Check if repository exists
+          if ! aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY_UI }} --region ${{ env.AWS_REGION }} 2>/dev/null; then
+            echo "ECR repository ${{ env.ECR_REPOSITORY_UI }} does not exist. Creating..."
+            aws ecr create-repository \
+              --repository-name ${{ env.ECR_REPOSITORY_UI }} \
+              --region ${{ env.AWS_REGION }} \
+              --image-scanning-configuration scanOnPush=true \
+              --encryption-configuration encryptionType=AES256
+            echo "ECR repository ${{ env.ECR_REPOSITORY_UI }} created successfully"
+          else
+            echo "ECR repository ${{ env.ECR_REPOSITORY_UI }} already exists"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date +%Y%m%d-%H%M%S)" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./ui
+          file: ui/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_UI }}:latest
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_UI }}:${{ steps.meta.outputs.sha_short }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_UI }}:${{ steps.meta.outputs.timestamp }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Output image URIs
+        run: |
+          echo "✅ UI image pushed successfully!"
+          echo ""
+          echo "📦 UI Image URIs:"
+          echo "  - ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_UI }}:latest"
+          echo "  - ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_UI }}:${{ steps.meta.outputs.sha_short }}"
+          echo "  - ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_UI }}:${{ steps.meta.outputs.timestamp }}"
           echo ""
           echo "🔄 Next steps:"
           echo "  1. Update Helm values.yaml:"
-          echo "     multiwovenServer.image.repository: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}"
-          echo "     multiwovenServer.image.tag: ${{ steps.meta.outputs.sha_short }}"
-          echo ""
-          echo "  2. Remove init container from deployments/server.yaml (custom initializers are now in the image)"
+          echo "     multiwovenServer.image.repository: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_SERVER }}"
+          echo "     multiwovenUI.image.repository: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_UI }}"
+          echo "     (Use tag: ${{ steps.meta.outputs.sha_short }} or 'latest')"
