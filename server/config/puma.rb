@@ -14,7 +14,7 @@ threads min_threads_count, max_threads_count
 # Specifies that the worker count should equal the number of processors in production.
 require "concurrent-ruby"
 worker_count = Integer(ENV.fetch("WEB_CONCURRENCY") { Concurrent.physical_processor_count })
-on_worker_boot do
+on_booted do
   Rails.logger.info("Initializing temporal client")
   TemporalService.setup
 end
