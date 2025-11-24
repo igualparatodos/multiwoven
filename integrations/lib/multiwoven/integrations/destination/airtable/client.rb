@@ -75,10 +75,12 @@ module Multiwoven
               )
               if success?(response)
                 write_success += chunk.size
+                log_message_array << log_request_response("info", args, response)
               else
                 write_failure += chunk.size
+                log_message_array << log_request_response("error", args, response)
+                raise response.body
               end
-              log_message_array << log_request_response("info", args, response)
             rescue StandardError => e
               handle_exception(e, {
                                  context: "AIRTABLE:RECORD:WRITE:EXCEPTION",
