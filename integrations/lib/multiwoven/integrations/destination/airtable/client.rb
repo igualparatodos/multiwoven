@@ -78,8 +78,7 @@ module Multiwoven
                 log_message_array << log_request_response("info", args, response)
               else
                 write_failure += chunk.size
-                log_message_array << log_request_response("error", args, response)
-                raise response.body
+                raise StandardError, "Airtable write failed response=#{response.body} payload=#{payload}"
               end
             rescue StandardError => e
               handle_exception(e, {
