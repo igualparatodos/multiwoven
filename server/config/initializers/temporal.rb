@@ -33,6 +33,7 @@ module TemporalService
           client_cert
         )
       end
+      Rails.logger.info("Temporal client connected - Namespace: #{config.namespace}, Task Queue: #{config.task_queue}")
     end
   end
 end
