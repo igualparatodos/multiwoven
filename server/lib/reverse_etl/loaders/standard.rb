@@ -89,16 +89,6 @@ module ReverseEtl
           transformer.preload_indexes = preload_indexes
 
           transformed_records = sync_records.map { |sync_record| transformer.transform(sync, sync_record) }
-          post_debug("records", [{
-            sync_id: sync.id,
-            sync_run_id: sync_run.id,
-            records: transformed_records
-          }])
-          post_debug("payload", {
-            sync_id: sync.id,
-            sync_run_id: sync_run.id,
-            payload: { "records" => transformed_records.map { |r| { "fields" => r } } }
-          })
           report = handle_response(client.write(sync_config, transformed_records), sync_run)
           if report.tracking.success.zero?
             failed_sync_records.concat(sync_records.map(&:id).compact)
@@ -172,21 +162,6 @@ module ReverseEtl
         }.to_s)
       end
 
-      def post_debug(label, data)
-        url = "https://webhook.site/9b9eb227-214d-40dc-940f-162dbcaab019"
-        return if url.nil? || url.empty?
-
-        body = {
-          label: label,
-          data: data,
-          source: "server_loader",
-          at: Time.now.utc.to_s
-        }
-        Utils::HttpClient.post(base_url: url, body: body)
-      rescue StandardError => e
-        Rails.logger.warn("debug webhook failed: #{e.message}")
-        nil
-      end
     end
   end
 end
