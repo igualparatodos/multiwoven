@@ -4,6 +4,7 @@ on:
   push:
     branches: [igual]
     paths:
+      - 'integrations/**'
       - 'server/**'
       - 'ui/**'
       - '.github/workflows/build-ecr.yml'
