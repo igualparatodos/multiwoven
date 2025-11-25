@@ -5,7 +5,7 @@ require_relative "destination_handlers/registry"
 module ReverseEtl
   module Transformers
     class UserMapping < Base
-      attr_accessor :mappings, :record, :destination_data, :preload_indexes
+      attr_accessor :mappings, :record, :destination_data, :preload_indexes, :destination_schema
 
       def transform(sync, sync_record)
         @mappings = sync.configuration
@@ -13,6 +13,8 @@ module ReverseEtl
         @destination_data = {}
         @sync = sync
         @preload_indexes = preload_indexes || {}
+        @destination_schema ||= fetch_destination_schema(sync)
+        @destination_schema_properties ||= extract_schema_properties(@destination_schema)
 
         if mappings.is_a?(Array)
           transform_record_v2
@@ -20,6 +22,7 @@ module ReverseEtl
           transform_record_v1
         end
 
+        apply_destination_schema!(@destination_data, @destination_schema_properties)
         @destination_data
       rescue StandardError => e
         # Utils::ExceptionReporter.report(e, {
@@ -152,6 +155,105 @@ module ReverseEtl
         else
           current[key] = value
         end
+      end
+
+      def destination_schema_available?(sync)
+        sync.respond_to?(:destination) && sync.respond_to?(:stream_name)
+      end
+
+      def fetch_destination_schema(sync)
+        return destination_schema if destination_schema.present?
+        return {} unless destination_schema_available?(sync)
+
+        destination = sync.destination
+        catalog = destination&.catalog
+        return {} unless catalog.present?
+
+        catalog.json_schema(sync.stream_name) || {}
+      rescue StandardError => e
+        Rails.logger.debug({
+          error_message: e.message,
+          context: "UserMapping.fetch_destination_schema",
+          sync_id: sync.respond_to?(:id) ? sync.id : nil
+        }.to_s)
+        {}
+      end
+
+      def extract_schema_properties(schema)
+        schema_hash = convert_to_hash(schema)
+        properties = schema_hash["properties"] || schema_hash[:properties] || {}
+        properties.respond_to?(:with_indifferent_access) ? properties.with_indifferent_access : properties
+      rescue StandardError
+        {}
+      end
+
+      def convert_to_hash(schema)
+        return {} if schema.blank?
+        return schema if schema.is_a?(Hash)
+        schema.respond_to?(:to_h) ? schema.to_h : {}
+      end
+
+      def apply_destination_schema!(data, schema_properties)
+        return data unless data.is_a?(Hash)
+        return data if schema_properties.blank?
+
+        data.keys.each do |field|
+          schema = schema_properties[field]
+          next if schema.blank?
+
+          data[field] = coerce_value(data[field], schema)
+        end
+        data
+      end
+
+      def coerce_value(value, schema)
+        return value if value.nil? || schema.blank?
+
+        schema_hash = schema.respond_to?(:with_indifferent_access) ? schema.with_indifferent_access : schema
+        types = Array(schema_hash["type"]).map(&:to_s)
+        return value if types.empty?
+
+        return coerce_array(value, schema_hash) if types.include?("array")
+        return coerce_number(value) if (types & %w[number integer]).any?
+        return coerce_boolean(value) if types.include?("boolean")
+
+        value
+      end
+
+      def coerce_array(value, schema)
+        return value unless value.is_a?(Array)
+
+        item_schema = schema["items"] || {}
+        return value if item_schema.blank?
+
+        value.map { |item| coerce_value(item, item_schema) }
+      end
+
+      INTEGER_PATTERN = /\A[-+]?\d+\z/.freeze
+      DECIMAL_PATTERN = /\A[-+]?\d+(\.\d+)?\z/.freeze
+
+      def coerce_number(value)
+        return value if value.nil? || value.is_a?(Numeric)
+        return value unless value.is_a?(String)
+
+        normalized = value.strip
+        return value if normalized.empty?
+        return value unless normalized.match?(DECIMAL_PATTERN)
+
+        return normalized.to_i if normalized.match?(INTEGER_PATTERN)
+
+        normalized.to_f
+      end
+
+      def coerce_boolean(value)
+        return value if value.nil? || value == true || value == false
+        return value unless value.respond_to?(:to_s)
+
+        normalized = value.to_s.strip.downcase
+        return true if %w[true 1 yes y].include?(normalized)
+        return false if %w[false 0 no n].include?(normalized)
+
+        value
       end
     end
   end

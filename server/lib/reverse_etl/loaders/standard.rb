@@ -38,6 +38,7 @@ module ReverseEtl
 
           Parallel.each(sync_records, in_threads: concurrency) do |sync_record|
             transformer = Transformers::UserMapping.new
+            transformer.destination_schema = sync_config.stream&.json_schema
             transformer.preload_indexes = preload_indexes
             record = transformer.transform(sync, sync_record)
             Rails.logger.info "sync_id = #{sync.id} sync_run_id = #{sync_run.id} sync_record = #{record}"
@@ -87,6 +88,7 @@ module ReverseEtl
                       in_threads: THREAD_COUNT) do |sync_records|
           transformer = Transformers::UserMapping.new
           transformer.preload_indexes = preload_indexes
+          transformer.destination_schema = sync_config.stream&.json_schema
 
           transformed_records = sync_records.map { |sync_record| transformer.transform(sync, sync_record) }
           report = handle_response(client.write(sync_config, transformed_records), sync_run)
