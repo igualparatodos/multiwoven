@@ -106,6 +106,52 @@ const MapFields = ({
     handleOnConfigChange(newFields);
   };
 
+  const handleAutoMap = () => {
+    const existingMappings = new Map(fields.map((field) => [field.to.toLowerCase(), field.from]));
+    const newMappings: FieldMapType[] = [...fields];
+
+    // Find matching fields between model and destination columns
+    destinationColumns.forEach((destCol) => {
+      const destColLower = destCol.toLowerCase();
+
+      // Skip if already mapped
+      if (existingMappings.has(destColLower) && existingMappings.get(destColLower) !== '') {
+        return;
+      }
+
+      // Find matching model column (case-insensitive)
+      const matchingModelCol = modelColumns.find(
+        (modelCol) => modelCol.toLowerCase() === destColLower
+      );
+
+      if (matchingModelCol) {
+        const existingIndex = newMappings.findIndex(
+          (field) => field.to.toLowerCase() === destColLower
+        );
+
+        if (existingIndex >= 0) {
+          // Update existing empty mapping
+          newMappings[existingIndex] = {
+            ...newMappings[existingIndex],
+            from: matchingModelCol,
+            mapping_type: OPTION_TYPE.STANDARD,
+          };
+        } else {
+          // Add new mapping
+          newMappings.push({
+            from: matchingModelCol,
+            to: destCol,
+            mapping_type: OPTION_TYPE.STANDARD,
+            isRequired: requiredDestinationColumns.includes(destCol),
+          });
+        }
+      }
+    });
+
+    setFields(newMappings);
+    handleOnConfigChange(newMappings);
+  };
+
   const mappedColumns = fields.map((item) => item.from);
 
   useEffect(() => {
@@ -205,7 +251,7 @@ const MapFields = ({
           </Box>
         </Box>
       ))}
-      <Box>
+      <Box display='flex' gap={2}>
         <Button
           variant='shell'
           onClick={handleOnAppendField}
@@ -219,6 +265,20 @@ const MapFields = ({
           isDisabled={!stream}
         >
           Add mapping
+        </Button>
+        <Button
+          variant='shell'
+          onClick={handleAutoMap}
+          height='32px'
+          minWidth={0}
+          width='auto'
+          fontSize='12px'
+          fontWeight={700}
+          lineHeight='18px'
+          letterSpacing='-0.12px'
+          isDisabled={!stream || modelColumns.length === 0}
+        >
+          Auto-map fields
         </Button>
       </Box>
     </Box>

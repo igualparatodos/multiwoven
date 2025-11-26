@@ -95,6 +95,30 @@ const MapCustomFields = ({
     handleOnConfigChange(newFields);
   };
 
+  const handleAutoMap = () => {
+    // For custom fields, create mappings where source and destination have the same name
+    const existingMappedColumns = new Set(
+      fields.filter((field) => field.from !== '').map((field) => field.from.toLowerCase())
+    );
+
+    const newMappings: FieldMapType[] = modelColumns
+      .filter((modelCol) => !existingMappedColumns.has(modelCol.toLowerCase()))
+      .map((modelCol) => ({
+        from: modelCol,
+        to: modelCol,
+        mapping_type: OPTION_TYPE.STANDARD,
+      }));
+
+    // Keep existing mappings and add new ones
+    const updatedFields = [
+      ...fields.filter((field) => field.from !== ''),
+      ...newMappings,
+    ];
+
+    setFields(updatedFields);
+    handleOnConfigChange(updatedFields);
+  };
+
   const mappedColumns = fields.map((item) => item.from);
 
   useEffect(() => {
@@ -160,7 +184,7 @@ const MapCustomFields = ({
           )}
         </Box>
       ))}
-      <Box>
+      <Box display='flex' gap={2}>
         <Button
           variant='shell'
           onClick={handleOnAppendField}
@@ -174,6 +198,20 @@ const MapCustomFields = ({
           isDisabled={!stream}
         >
           Add mapping
+        </Button>
+        <Button
+          variant='shell'
+          onClick={handleAutoMap}
+          height='32px'
+          minWidth={0}
+          width='auto'
+          fontSize='12px'
+          fontWeight={700}
+          lineHeight='18px'
+          letterSpacing='-0.12px'
+          isDisabled={!stream || modelColumns.length === 0}
+        >
+          Auto-map fields
         </Button>
       </Box>
     </Box>
