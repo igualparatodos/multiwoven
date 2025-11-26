@@ -211,11 +211,13 @@ module ReverseEtl
 
         schema_hash = schema.respond_to?(:with_indifferent_access) ? schema.with_indifferent_access : schema
         types = Array(schema_hash["type"]).map(&:to_s)
+        format = schema_hash["format"]
         return value if types.empty?
 
         return coerce_array(value, schema_hash) if types.include?("array")
         return coerce_number(value) if (types & %w[number integer]).any?
         return coerce_boolean(value) if types.include?("boolean")
+        return coerce_date(value, format) if %w[date date-time].include?(format)
 
         value
       end
@@ -254,6 +256,50 @@ module ReverseEtl
         return false if %w[false 0 no n].include?(normalized)
 
         value
+      end
+
+      def coerce_date(value, format)
+        return value if value.nil?
+        return value if value.is_a?(Date) || value.is_a?(Time) || value.is_a?(DateTime)
+        return value unless value.is_a?(String)
+
+        normalized = value.strip
+        return value if normalized.empty?
+
+        begin
+          # Parse the datetime string and convert to ISO 8601 format
+          parsed_time = parse_datetime(normalized)
+          return value unless parsed_time
+
+          # For date format, return just the date part
+          if format == "date"
+            parsed_time.strftime("%Y-%m-%d")
+          else
+            # For date-time format, return ISO 8601 with timezone
+            parsed_time.iso8601
+          end
+        rescue StandardError => e
+          Rails.logger.debug({
+            error_message: "Failed to coerce date value: #{e.message}",
+            value: value,
+            format: format
+          }.to_s)
+          value
+        end
+      end
+
+      def parse_datetime(value)
+        # Try parsing as ISO 8601 first
+        return Time.parse(value) if value.match?(/^\d{4}-\d{2}-\d{2}/)
+
+        # Try other common formats
+        return DateTime.strptime(value, "%Y-%m-%d %H:%M:%S%z") if value.match?(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)
+        return DateTime.strptime(value, "%m/%d/%Y") if value.match?(%r{^\d{1,2}/\d{1,2}/\d{4}$})
+
+        # Fallback to Time.parse for other formats
+        Time.parse(value)
+      rescue StandardError
+        nil
       end
     end
   end

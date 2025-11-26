@@ -71,11 +71,15 @@ module Multiwoven
                 url,
                 sync_config.stream.request_method,
                 payload: payload,
-                headers: auth_headers(api_key)
+                headers: auth_headers(api_key),
+                options: { params: { typecast: true } }
               )
               if success?(response)
                 write_success += chunk.size
-                log_message_array << log_request_response("info", args, response)
+                # Create one log per record in the successful chunk
+                chunk.each do |record|
+                  log_message_array << create_log_for_record(record, "info", args, response)
+                end
               else
                 write_failure += chunk.size
                 raise StandardError, "Airtable write failed response=#{response.body} payload=#{payload}"
@@ -88,7 +92,10 @@ module Multiwoven
                                  sync_run_id: sync_config.sync_run_id
                                })
               write_failure += chunk.size
-              log_message_array << log_request_response("error", args, e.message)
+              # Create one error log per record in the failed chunk
+              chunk.each do |record|
+                log_message_array << create_log_for_record(record, "error", args, e.message)
+              end
             end
             tracking_message(write_success, write_failure, log_message_array)
           rescue StandardError => e
@@ -101,6 +108,19 @@ module Multiwoven
           end
 
           private
+
+          def create_log_for_record(record, level, request_args, response)
+            Multiwoven::Integrations::Protocol::LogMessage.new(
+              name: self.class.name,
+              level: level,
+              message: {
+                request: request_args.to_s,
+                response: response.to_s,
+                level: level,
+                record: record
+              }.to_json
+            )
+          end
 
           def create_payload(records)
             {

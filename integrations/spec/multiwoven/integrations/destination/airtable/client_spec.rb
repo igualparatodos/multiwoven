@@ -156,12 +156,17 @@ RSpec.describe Multiwoven::Integrations::Destination::Airtable::Client do
       message = client.write(sync_config, records)
       expect(message.tracking.success).to eq(2)
       expect(message.tracking.failed).to eq(0)
-      log_message = message.tracking.logs.first
-      expect(log_message).to be_a(Multiwoven::Integrations::Protocol::LogMessage)
-      expect(log_message.level).to eql("info")
 
-      expect(log_message.message).to include("request")
-      expect(log_message.message).to include("response")
+      # Now we expect one log per record
+      expect(message.tracking.logs.size).to eq(2)
+
+      message.tracking.logs.each do |log_message|
+        expect(log_message).to be_a(Multiwoven::Integrations::Protocol::LogMessage)
+        expect(log_message.level).to eql("info")
+        expect(log_message.message).to include("request")
+        expect(log_message.message).to include("response")
+        expect(log_message.message).to include("record")
+      end
     end
 
     it "increments the failure count" do
@@ -170,12 +175,17 @@ RSpec.describe Multiwoven::Integrations::Destination::Airtable::Client do
       message = client.write(sync_config, records)
       expect(message.tracking.success).to eq(0)
       expect(message.tracking.failed).to eq(2)
-      log_message = message.tracking.logs.first
-      expect(log_message).to be_a(Multiwoven::Integrations::Protocol::LogMessage)
-      expect(log_message.level).to eql("info")
 
-      expect(log_message.message).to include("request")
-      expect(log_message.message).to include("response")
+      # Now we expect one log per failed record
+      expect(message.tracking.logs.size).to eq(2)
+
+      message.tracking.logs.each do |log_message|
+        expect(log_message).to be_a(Multiwoven::Integrations::Protocol::LogMessage)
+        expect(log_message.level).to eql("error")
+        expect(log_message.message).to include("request")
+        expect(log_message.message).to include("Airtable write failed")
+        expect(log_message.message).to include("record")
+      end
     end
   end
 

@@ -163,5 +163,72 @@ RSpec.describe ReverseEtl::Transformers::UserMapping do
         expect(results).to eq(expected_result)
       end
     end
+
+    context "when destination schema contains numeric fields" do
+      let(:mapping) do
+        {
+          "cr_fee" => "fee_amount",
+          "cr_return_quantity" => "quantity"
+        }
+      end
+
+      before do
+        extractor.destination_schema = {
+          "properties" => {
+            "fee_amount" => { "type" => %w[null number] },
+            "quantity" => { "type" => %w[null number] }
+          }
+        }
+      end
+
+      it "coerces numeric strings according to the schema types" do
+        results = extractor.transform(sync, sync_record)
+
+        expect(results["quantity"]).to eq(17)
+        expect(results["fee_amount"]).to be_within(0.0001).of(57.82)
+      end
+    end
+
+    context "when destination schema contains date/datetime fields" do
+      let(:source_data) do
+        {
+          "starts_at" => "2025-10-21 10:30:00+00",
+          "created_at" => "2024-01-15T14:30:00Z",
+          "birth_date" => "1990-05-15"
+        }
+      end
+
+      let(:mapping) do
+        {
+          "starts_at" => "starts_at",
+          "created_at" => "created_at",
+          "birth_date" => "birth_date"
+        }
+      end
+
+      before do
+        extractor.destination_schema = {
+          "properties" => {
+            "starts_at" => { "type" => %w[null string], "format" => "date-time" },
+            "created_at" => { "type" => %w[null string], "format" => "date-time" },
+            "birth_date" => { "type" => %w[null string], "format" => "date" }
+          }
+        }
+      end
+
+      it "coerces datetime strings to ISO 8601 format" do
+        results = extractor.transform(sync, sync_record)
+
+        # Should convert "2025-10-21 10:30:00+00" to proper ISO 8601 format
+        expect(results["starts_at"]).to match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/)
+        expect(results["starts_at"]).to include("2025-10-21T10:30:00")
+
+        # Should preserve already valid ISO 8601 format
+        expect(results["created_at"]).to eq("2024-01-15T14:30:00+00:00")
+
+        # Should extract just the date part for date fields
+        expect(results["birth_date"]).to eq("1990-05-15")
+      end
+    end
   end
 end

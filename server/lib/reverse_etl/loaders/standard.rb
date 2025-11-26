@@ -92,6 +92,10 @@ module ReverseEtl
 
           transformed_records = sync_records.map { |sync_record| transformer.transform(sync, sync_record) }
           report = handle_response(client.write(sync_config, transformed_records), sync_run)
+
+          # Update sync_records with per-record logs and status
+          update_batch_sync_records_with_logs(sync_records, report)
+
           if report.tracking.success.zero?
             failed_sync_records.concat(sync_records.map(&:id).compact)
           else
@@ -129,6 +133,25 @@ module ReverseEtl
       def update_sync_record_logs_and_status(report, sync_record)
         status = report.tracking.success.zero? ? "failed" : "success"
         sync_record.update(logs: get_sync_records_logs(report), status:)
+      end
+
+      def update_batch_sync_records_with_logs(sync_records, report)
+        return unless report.tracking.respond_to?(:logs) && report.tracking.logs.present?
+
+        # Map each log to its corresponding sync_record (they're in the same order)
+        logs = report.tracking.logs
+        sync_records.each_with_index do |sync_record, index|
+          # Get the log for this record (or use the first log if there aren't enough)
+          log = logs[index] || logs.first
+          next unless log&.message.present?
+
+          begin
+            parsed_log = JSON.parse(log.message)
+            sync_record.update(logs: parsed_log)
+          rescue JSON::ParserError => e
+            Rails.logger.error("Failed to parse log message for sync_record #{sync_record.id}: #{e.message}")
+          end
+        end
       end
 
       def get_sync_records_logs(report)
