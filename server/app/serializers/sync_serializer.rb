@@ -2,7 +2,8 @@
 
 class SyncSerializer < ActiveModel::Serializer
   attributes :id, :source_id, :destination_id, :model_id, :configuration,
-             :schedule_type, :sync_mode, :sync_interval, :sync_interval_unit, :cron_expression,
+             :schedule_type, :sync_mode, :destination_sync_mode, :unique_identifier_config,
+             :sync_interval, :sync_interval_unit, :cron_expression,
              :stream_name, :status, :cursor_field, :current_cursor_field,
              :updated_at, :created_at
 

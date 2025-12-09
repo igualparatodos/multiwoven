@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import SteppedForm from '@/components/SteppedForm';
-import { Stream } from '@/views/Activate/Syncs/types';
+import { Stream, UniqueIdentifierConfig } from '@/views/Activate/Syncs/types';
 
 import { Box, Drawer, DrawerBody, DrawerContent, DrawerOverlay } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
@@ -17,6 +17,8 @@ const SyncForm = (): JSX.Element => {
   const [schemaMode, setSchemaMode] = useState<SchemaMode | null>(null);
   const [selectedSyncMode, setSelectedSyncMode] = useState('');
   const [cursorField, setCursorField] = useState('');
+  const [selectedDestinationSyncMode, setSelectedDestinationSyncMode] = useState('destination_insert');
+  const [uniqueIdentifierConfig, setUniqueIdentifierConfig] = useState<UniqueIdentifierConfig | null>(null);
 
   const navigate = useNavigate();
   const steps = [
@@ -47,11 +49,15 @@ const SyncForm = (): JSX.Element => {
           schemaMode={schemaMode}
           cursorField={cursorField}
           selectedSyncMode={selectedSyncMode}
+          selectedDestinationSyncMode={selectedDestinationSyncMode}
+          uniqueIdentifierConfig={uniqueIdentifierConfig}
           setSelectedStream={setSelectedStream}
           setConfiguration={setConfiguration}
           setSchemaMode={setSchemaMode}
           setSelectedSyncMode={setSelectedSyncMode}
           setCursorField={setCursorField}
+          setSelectedDestinationSyncMode={setSelectedDestinationSyncMode}
+          setUniqueIdentifierConfig={setUniqueIdentifierConfig}
         />
       ),
       isRequireContinueCta: false,

@@ -73,6 +73,11 @@ export type SyncsConfigurationForTemplateMapping = {
   };
 };
 
+export type UniqueIdentifierConfig = {
+  source_field: string;
+  destination_field: string;
+};
+
 export type ConfigSync = {
   source_id: string;
   destination_id: string;
@@ -81,6 +86,8 @@ export type ConfigSync = {
   cron_expression: string;
   configuration: FieldMapType[];
   stream_name: string;
+  destination_sync_mode?: string;
+  unique_identifier_config?: UniqueIdentifierConfig;
 };
 
 export interface SyncEntity extends ConfigSync {
@@ -121,6 +128,8 @@ export type CreateSyncResponse = {
     sync_interval_unit: 'minutes';
     sync_mode: 'full_refresh';
     cursor_field: string;
+    destination_sync_mode?: string;
+    unique_identifier_config?: UniqueIdentifierConfig;
     source: {
       connector_name: string;
       icon: string;

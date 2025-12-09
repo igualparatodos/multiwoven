@@ -79,6 +79,7 @@ module ReverseEtl
       def process_batch_records(sync_run, sync, sync_config, activity, preload_indexes)
         client = sync.destination.connector_client.new
         batch_size = sync_config.stream.batch_size
+        Rails.logger.info("[LOADER] process_batch_records started: sync_run_id=#{sync_run.id}, sync_id=#{sync.id}, destination_sync_mode=#{sync_config.destination_sync_mode}, batch_size=#{batch_size}, pending_records=#{sync_run.sync_records.pending.count}")
 
         # track sync record status
         successfull_sync_records = []
@@ -103,7 +104,8 @@ module ReverseEtl
           end
         rescue Activities::LoaderActivity::FullRefreshFailed
           raise
-        rescue StandardError
+        rescue StandardError => e
+          Rails.logger.error("[LOADER] Error in process_batch_records: #{e.message}, sync_run_id: #{sync_run.id}, trace: #{e.backtrace.first(5)}")
           # Utils::ExceptionReporter.report(e, {
           #                                   sync_run_id: sync_run.id
           #                                 })

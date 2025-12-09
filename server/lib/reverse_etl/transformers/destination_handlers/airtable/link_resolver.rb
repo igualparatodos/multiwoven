@@ -37,13 +37,15 @@ module ReverseEtl
             }
 
             url = "#{AIRTABLE_URL_BASE}#{@base_id}/#{linked_table_id}"
+
             loop do
               response = ::Multiwoven::Integrations::Core::HttpClient.request(
                 url,
-                ::Multiwoven::Integrations::Core::HttpHelper::HTTP_GET,
+                HTTP_GET,
                 headers: auth_headers,
                 options: { params: }
               )
+
               body = safe_parse_body(response)
               break unless body.is_a?(Hash)
 
@@ -76,7 +78,7 @@ module ReverseEtl
             loop do
               response = ::Multiwoven::Integrations::Core::HttpClient.request(
                 url,
-                ::Multiwoven::Integrations::Core::Constants::HTTP_GET,
+                HTTP_GET,
                 headers: auth_headers,
                 options: { params: }
               )

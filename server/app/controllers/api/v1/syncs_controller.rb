@@ -142,10 +142,12 @@ module Api
                                       :schedule_type,
                                       :sync_interval,
                                       :sync_mode,
+                                      :destination_sync_mode,
                                       :sync_interval_unit,
                                       :cron_expression,
                                       :stream_name,
                                       :cursor_field,
+                                      unique_identifier_config: %i[source_field destination_field],
                                       configuration: [
                                         :from,
                                         :to,

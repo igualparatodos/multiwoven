@@ -8,7 +8,7 @@ class SyncRecord < ApplicationRecord
   validates :action, presence: true
   validates :primary_key, presence: true
 
-  enum :action, %i[destination_insert destination_update]
+  enum :action, %i[destination_insert destination_update destination_upsert]
   enum :status, %i[pending success failed]
 
   belongs_to :sync

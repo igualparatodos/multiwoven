@@ -4,7 +4,7 @@ import { ModelEntity } from '@/views/Models/types';
 import { Box } from '@chakra-ui/react';
 import { FormEvent, useContext, Dispatch, SetStateAction, useState, useEffect } from 'react';
 import SelectStreams from './SelectStreams';
-import { Stream, FieldMap as FieldMapType } from '@/views/Activate/Syncs/types';
+import { Stream, FieldMap as FieldMapType, UniqueIdentifierConfig } from '@/views/Activate/Syncs/types';
 import MapFields from './MapFields';
 import { ConnectorItem } from '@/views/Connectors/types';
 import FormFooter from '@/components/FormFooter';
@@ -14,6 +14,7 @@ import { getCatalog } from '@/services/syncs';
 import { SchemaMode } from '@/views/Activate/Syncs/types';
 import Loader from '@/components/Loader';
 import { useStore } from '@/stores';
+import OperationTypeSelector from './OperationTypeSelector';
 
 type ConfigureSyncsProps = {
   selectedStream: Stream | null;
@@ -21,11 +22,15 @@ type ConfigureSyncsProps = {
   schemaMode: SchemaMode | null;
   selectedSyncMode: string;
   cursorField: string;
+  selectedDestinationSyncMode: string;
+  uniqueIdentifierConfig: UniqueIdentifierConfig | null;
   setSelectedStream: Dispatch<SetStateAction<Stream | null>>;
   setConfiguration: Dispatch<SetStateAction<FieldMapType[] | null>>;
   setSchemaMode: Dispatch<SetStateAction<SchemaMode | null>>;
   setSelectedSyncMode: Dispatch<SetStateAction<string>>;
   setCursorField: Dispatch<SetStateAction<string>>;
+  setSelectedDestinationSyncMode: Dispatch<SetStateAction<string>>;
+  setUniqueIdentifierConfig: Dispatch<SetStateAction<UniqueIdentifierConfig | null>>;
 };
 
 const ConfigureSyncs = ({
@@ -33,11 +38,15 @@ const ConfigureSyncs = ({
   configuration,
   selectedSyncMode,
   cursorField,
+  selectedDestinationSyncMode,
+  uniqueIdentifierConfig,
   setSelectedStream,
   setConfiguration,
   setSchemaMode,
   setSelectedSyncMode,
   setCursorField,
+  setSelectedDestinationSyncMode,
+  setUniqueIdentifierConfig,
 }: ConfigureSyncsProps): JSX.Element | null => {
   const { state, stepInfo, handleMoveForward } = useContext(SteppedFormContext);
   const [refresh, setRefresh] = useState(false);
@@ -62,7 +71,7 @@ const ConfigureSyncs = ({
 
   const handleOnSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const payload = {
+    const payload: any = {
       source_id: selectedModel?.connector?.id,
       destination_id: selectedDestination.id,
       model_id: selectedModel.id,
@@ -70,7 +79,13 @@ const ConfigureSyncs = ({
       configuration,
       sync_mode: selectedSyncMode,
       cursor_field: cursorField,
+      destination_sync_mode: selectedDestinationSyncMode,
     };
+
+    // Only include unique_identifier_config for upsert/update modes
+    if ((selectedDestinationSyncMode === 'destination_upsert' || selectedDestinationSyncMode === 'destination_update') && uniqueIdentifierConfig) {
+      payload.unique_identifier_config = uniqueIdentifierConfig;
+    }
 
     handleMoveForward(stepInfo?.formKey as string, payload);
   };
@@ -119,6 +134,14 @@ const ConfigureSyncs = ({
             setCursorField={setCursorField}
             streams={streams}
           />
+          <OperationTypeSelector
+            selectedDestinationSyncMode={selectedDestinationSyncMode}
+            setSelectedDestinationSyncMode={setSelectedDestinationSyncMode}
+            uniqueIdentifierConfig={uniqueIdentifierConfig}
+            setUniqueIdentifierConfig={setUniqueIdentifierConfig}
+            selectedStream={selectedStream}
+            destinationName={selectedDestination?.attributes?.connector_name}
+          />
           {catalogData?.data?.attributes?.catalog?.schema_mode === SchemaMode.schemaless ? (
             <MapCustomFields
               model={selectedModel}
@@ -141,7 +164,11 @@ const ConfigureSyncs = ({
           <FormFooter
             ctaName='Continue'
             ctaType='submit'
-            isCtaDisabled={!selectedStream || !SchemaMode.schemaless}
+            isCtaDisabled={
+              !selectedStream ||
+              !SchemaMode.schemaless ||
+              ((selectedDestinationSyncMode === 'destination_upsert' || selectedDestinationSyncMode === 'destination_update') && !uniqueIdentifierConfig?.destination_field)
+            }
             isBackRequired
             isContinueCtaRequired
             isDocumentsSectionRequired

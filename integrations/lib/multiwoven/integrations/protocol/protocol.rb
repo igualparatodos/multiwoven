@@ -8,7 +8,7 @@ module Multiwoven
 
     SyncMode = Types::String.enum("full_refresh", "incremental")
     SyncStatus = Types::String.enum("started", "running", "complete", "incomplete")
-    DestinationSyncMode = Types::String.enum("insert", "upsert")
+    DestinationSyncMode = Types::String.enum("destination_insert", "destination_upsert", "destination_update")
     ConnectorType = Types::String.enum("source", "destination")
     ConnectorQueryType = Types::String.enum("raw_sql", "soql", "ai_ml", "vector_search")
     ModelQueryType = Types::String.enum("raw_sql", "dbt", "soql", "table_selector", "ai_ml", "dynamic_sql", "unstructured", "vector_search")

@@ -142,7 +142,7 @@ RSpec.describe Multiwoven::Integrations::Destination::Airtable::Client do
       expect(catalog.streams.count).to eql(1)
       expect(catalog.streams.first[:json_schema]).to eq(json_schema)
       expect(catalog.streams.first[:batch_support]).to eq(true)
-      expect(catalog.streams.first[:supported_sync_modes]).to eq(%w[incremental])
+      expect(catalog.streams.first[:supported_sync_modes]).to eq(%w[incremental full_refresh])
     end
   end
 

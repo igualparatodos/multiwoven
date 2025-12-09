@@ -37,11 +37,14 @@ class Sync < ApplicationRecord # rubocop:disable Metrics/ClassLength
   validates :stream_name, presence: true
   validates :status, presence: true
   validate :stream_name_exists?
+  validate :unique_identifier_required_for_upsert_or_update
+  validate :unique_identifier_field_exists_in_schema
 
   enum :schedule_type, %i[manual interval cron_expression]
   enum :status, %i[disabled healthy pending failed aborted]
   enum :sync_mode, %i[full_refresh incremental]
   enum :sync_interval_unit, %i[minutes hours days weeks]
+  enum :destination_sync_mode, %i[destination_insert destination_upsert destination_update]
 
   belongs_to :workspace
   belongs_to :source, class_name: "Connector"
@@ -51,6 +54,7 @@ class Sync < ApplicationRecord # rubocop:disable Metrics/ClassLength
   has_many :sync_files, dependent: :destroy
 
   after_initialize :set_defaults, if: :new_record?
+  before_validation :infer_and_update_unique_identifier_config
   after_save :schedule_sync, if: :schedule_sync?
   after_update :terminate_sync, if: :terminate_sync?
   after_discard :perform_post_discard_sync
@@ -86,11 +90,13 @@ class Sync < ApplicationRecord # rubocop:disable Metrics/ClassLength
       model: model.to_protocol,
       source: source.to_protocol,
       destination: destination.to_protocol,
-      stream: catalog.stream_to_protocol(
-        catalog.find_stream_by_name(stream_name)
+      stream: build_stream_with_unique_identifier(
+        catalog.stream_to_protocol(catalog.find_stream_by_name(stream_name))
       ),
       sync_mode: Multiwoven::Integrations::Protocol::SyncMode[sync_mode],
-      destination_sync_mode: Multiwoven::Integrations::Protocol::DestinationSyncMode["insert"],
+      destination_sync_mode: Multiwoven::Integrations::Protocol::DestinationSyncMode[
+        destination_sync_mode || "destination_insert"
+      ],
       cursor_field:,
       current_cursor_field:,
       sync_id: id.to_s,
@@ -184,6 +190,91 @@ class Sync < ApplicationRecord # rubocop:disable Metrics/ClassLength
     elsif catalog.find_stream_by_name(stream_name).blank?
       errors.add(:stream_name,
                  "Add a valid stream_name associated with destination connector")
+    end
+  end
+
+  def build_stream_with_unique_identifier(stream_protocol)
+    # Get the original stream from catalog to access x_airtable
+    catalog = destination.catalog
+    original_stream = catalog.find_stream_by_name(stream_name)
+
+    # Preserve x_airtable attribute if it exists (needed for Airtable table_id)
+    if original_stream.respond_to?(:x_airtable) || (original_stream.is_a?(Hash) && original_stream["x_airtable"])
+      x_airtable_data = original_stream.respond_to?(:x_airtable) ? original_stream.x_airtable : original_stream["x_airtable"]
+      stream_protocol.define_singleton_method(:x_airtable) do
+        x_airtable_data
+      end
+    end
+
+    if (destination_upsert? || destination_update?) && unique_identifier_config.present?
+      # Infer source_field from configuration mappings if not explicitly set
+      config = infer_source_field_from_mappings(unique_identifier_config)
+
+      # Extend stream with unique_identifier_config via singleton method
+      stream_protocol.define_singleton_method(:unique_identifier_config) do
+        config
+      end
+    end
+    stream_protocol
+  end
+
+  def infer_source_field_from_mappings(config)
+    destination_field = config["destination_field"]
+    source_field = config["source_field"]
+
+    # If source_field is not set or equals destination_field, infer it from mappings
+    if source_field.blank? || source_field == destination_field
+      # Look for a mapping where 'to' equals the destination_field
+      mapping = configuration.find { |m| m["to"] == destination_field }
+      if mapping
+        source_field = mapping["from"]
+        Rails.logger.info("Inferred source_field '#{source_field}' from mapping '#{mapping['from']}' -> '#{mapping['to']}'")
+      else
+        # If no mapping found, assume source and destination fields have the same name
+        source_field = destination_field
+        Rails.logger.warn("No mapping found for destination_field '#{destination_field}', using same name for source_field")
+      end
+    end
+
+    { "source_field" => source_field, "destination_field" => destination_field }
+  end
+
+  def infer_and_update_unique_identifier_config
+    return unless (destination_upsert? || destination_update?) && unique_identifier_config.present?
+
+    inferred_config = infer_source_field_from_mappings(unique_identifier_config)
+    self.unique_identifier_config = inferred_config
+  end
+
+  def unique_identifier_required_for_upsert_or_update
+    return unless destination_upsert? || destination_update?
+    return if unique_identifier_config.present? &&
+              unique_identifier_config["source_field"].present? &&
+              unique_identifier_config["destination_field"].present?
+
+    errors.add(:unique_identifier_config,
+               "must specify source_field and destination_field for upsert/update")
+  end
+
+  def unique_identifier_field_exists_in_schema
+    return unless unique_identifier_config&.dig("destination_field").present?
+
+    catalog = destination&.catalog
+    return unless catalog
+
+    stream = catalog.find_stream_by_name(stream_name)
+    return unless stream
+
+    # Handle both hash and object access
+    json_schema = stream.respond_to?(:json_schema) ? stream.json_schema : stream[:json_schema]
+    return unless json_schema
+
+    schema_properties = json_schema[:properties] || json_schema["properties"] || {}
+    dest_field = unique_identifier_config["destination_field"]
+
+    unless schema_properties.key?(dest_field) || schema_properties.key?(dest_field.to_sym)
+      errors.add(:unique_identifier_config,
+                 "destination_field '#{dest_field}' not found in Airtable schema")
     end
   end
 end

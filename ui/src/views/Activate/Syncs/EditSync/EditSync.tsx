@@ -15,6 +15,7 @@ import {
   SchemaMode,
   Stream,
   TriggerSyncButtonProps,
+  UniqueIdentifierConfig,
 } from '@/views/Activate/Syncs/types';
 import ScheduleForm from './ScheduleForm';
 import { FormikProps, useFormik } from 'formik';
@@ -31,6 +32,7 @@ import useSyncRuns from '@/hooks/syncs/useSyncRuns';
 import { APIRequestMethod } from '@/services/common';
 import { useAPIErrorsToast } from '@/hooks/useErrorToast';
 import useGetSyncById from '@/hooks/syncs/useGetSyncById';
+import OperationTypeSelector from '../SyncForm/ConfigureSyncs/OperationTypeSelector';
 
 const SYNC_STATUS = ['pending', 'started', 'querying', 'queued', 'in_progress'];
 
@@ -55,6 +57,8 @@ const EditSync = (): JSX.Element | null => {
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null);
   const [isEditLoading, setIsEditLoading] = useState<boolean>(false);
   const [configuration, setConfiguration] = useState<FieldMapType[] | null>(null);
+  const [selectedDestinationSyncMode, setSelectedDestinationSyncMode] = useState('destination_insert');
+  const [uniqueIdentifierConfig, setUniqueIdentifierConfig] = useState<UniqueIdentifierConfig | null>(null);
   const activeWorkspaceId = useStore((state) => state.workspaceId);
   const [refresh, setRefresh] = useState(false);
 
@@ -102,6 +106,8 @@ const EditSync = (): JSX.Element | null => {
       destinationFetchResponse?.data.id,
       syncData?.model?.id,
       syncData?.source?.id,
+      selectedDestinationSyncMode,
+      uniqueIdentifierConfig,
     );
 
   const formik: FormikProps<FinalizeSyncFormFields> = useFormik({
@@ -180,6 +186,10 @@ const EditSync = (): JSX.Element | null => {
       }
       setSelectedSyncMode(syncData?.sync_mode ?? 'full_refresh');
       setCursorField(syncData?.cursor_field || '');
+
+      // Set destination_sync_mode and unique_identifier_config
+      setSelectedDestinationSyncMode(syncData?.destination_sync_mode ?? 'destination_insert');
+      setUniqueIdentifierConfig(syncData?.unique_identifier_config ?? null);
     }
   }, [syncFetchResponse]);
 
@@ -222,6 +232,14 @@ const EditSync = (): JSX.Element | null => {
                 selectedCursorField={cursorField}
                 setCursorField={setCursorField}
                 streams={streams}
+              />
+              <OperationTypeSelector
+                selectedDestinationSyncMode={selectedDestinationSyncMode}
+                setSelectedDestinationSyncMode={setSelectedDestinationSyncMode}
+                uniqueIdentifierConfig={uniqueIdentifierConfig}
+                setUniqueIdentifierConfig={setUniqueIdentifierConfig}
+                selectedStream={selectedStream}
+                destinationName={destinationFetchResponse?.data?.attributes?.connector_name}
               />
               {catalogData?.data?.attributes?.catalog?.schema_mode === SchemaMode.schemaless ? (
                 <MapCustomFields

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { editSync } from '@/services/syncs';
-import { CreateSyncPayload, CreateSyncResponse } from '@/views/Activate/Syncs/types';
+import { CreateSyncPayload, CreateSyncResponse, UniqueIdentifierConfig } from '@/views/Activate/Syncs/types';
 import { CustomToastStatus } from '@/components/Toast/index';
 import useCustomToast from '@/hooks/useCustomToast';
 import titleCase from '@/utils/TitleCase';
@@ -16,6 +16,8 @@ const useEditSync = (
   destinationId?: string,
   modelId?: string,
   sourceId?: string,
+  selectedDestinationSyncMode?: string,
+  uniqueIdentifierConfig?: UniqueIdentifierConfig | null,
 ) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -40,6 +42,8 @@ const useEditSync = (
             sync_mode: selectedSyncMode,
             cursor_field: cursorField,
             cron_expression: data?.cron_expression,
+            destination_sync_mode: selectedDestinationSyncMode,
+            unique_identifier_config: uniqueIdentifierConfig || undefined,
           },
         };
 

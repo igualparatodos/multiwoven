@@ -15,8 +15,8 @@ module ReverseEtl
         model = sync_run.sync.model
         batch_query_params = batch_params(source_client, sync_run)
 
-        # TODO: Need to move on flush/clean temporal activity after Loader activity
-        # flush_records(sync_run)
+        # Flush old sync_records to allow new ones to be created (prevents unique constraint violations)
+        flush_records(sync_run)
 
         ReverseEtl::Utils::BatchQuery.execute_in_batches(batch_query_params) do |records, current_offset|
           total_query_rows += records.count
@@ -74,7 +74,7 @@ module ReverseEtl
           primary_key: primary_key_value,
           created_at: DateTime.current,
           sync_run_id: sync_run.id,
-          action: :destination_insert,
+          action: sync_run.sync.destination_sync_mode.to_sym,
           fingerprint: generate_fingerprint(record_data),
           record: record_data
         }

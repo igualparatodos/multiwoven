@@ -34,8 +34,8 @@ const ScheduleForm = ({ formik, isEdit }: ScheduleFormProps) => {
                 value='manual'
                 display='flex'
                 alignItems='flex-start'
+                backgroundColor='gray.100'
                 marginBottom='10px'
-                isDisabled
               >
                 <Box position='relative' top='-5px'>
                   <Text fontWeight='medium' size='sm'>

@@ -139,8 +139,8 @@ module ReverseEtl
         sync_record.new_record? || sync_record.fingerprint != fingerprint
       end
 
-      def action(sync_record)
-        sync_record.new_record? ? :destination_insert : :destination_update
+      def action(sync_run)
+        sync_run.sync.destination_sync_mode.to_sym
       end
 
       def update_or_create_sync_record(sync_record, record, sync_run, fingerprint)
@@ -152,7 +152,7 @@ module ReverseEtl
           end
           sync_record.assign_attributes(
             sync_run_id: sync_run.id,
-            action: action(sync_record),
+            action: action(sync_run),
             fingerprint:,
             record: record.data,
             status: "pending"

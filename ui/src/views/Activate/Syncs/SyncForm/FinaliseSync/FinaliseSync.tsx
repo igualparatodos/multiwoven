@@ -106,6 +106,34 @@ const FinaliseSync = (): JSX.Element => {
               borderStyle='solid'
               borderColor='gray.400'
             />
+
+            {/* Display Operation Type and Unique Identifier */}
+            {(syncConfigData?.configureSyncs as ConfigSync)?.destination_sync_mode &&
+             (syncConfigData?.configureSyncs as ConfigSync)?.destination_sync_mode !== 'destination_insert' && (
+              <Box mb='6' p='4' bg='blue.50' borderRadius='md' border='1px' borderColor='blue.200'>
+                <Text fontWeight='semibold' mb='2' size='sm'>
+                  Operation Type
+                </Text>
+                <Text size='sm' mb='3'>
+                  {(syncConfigData?.configureSyncs as ConfigSync)?.destination_sync_mode === 'destination_upsert'
+                    ? 'Create or Update (Upsert)'
+                    : 'Update only'}
+                </Text>
+
+                {(syncConfigData?.configureSyncs as ConfigSync)?.unique_identifier_config && (
+                  <>
+                    <Divider my='3' borderColor='blue.300' />
+                    <Text fontWeight='semibold' mb='2' size='sm'>
+                      Unique Identifier Field
+                    </Text>
+                    <Text size='sm'>
+                      {(syncConfigData?.configureSyncs as ConfigSync)?.unique_identifier_config?.destination_field}
+                    </Text>
+                  </>
+                )}
+              </Box>
+            )}
+
             <Box
               display='flex'
               flexDir={{ base: 'column', md: 'row' }}
@@ -125,8 +153,8 @@ const FinaliseSync = (): JSX.Element => {
                       value='manual'
                       display='flex'
                       alignItems='flex-start'
+                      backgroundColor='gray.100'
                       marginBottom='10px'
-                      isDisabled
                     >
                       <Box position='relative' top='-5px'>
                         <Text fontWeight='medium' size='sm'>
