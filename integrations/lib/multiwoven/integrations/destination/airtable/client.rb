@@ -74,18 +74,6 @@ module Multiwoven
 
             destination_sync_mode = sync_config.destination_sync_mode
 
-            # DEBUG LOGGING - Entry point
-            File.open("/tmp/airtable_debug.log", "a") do |f|
-              f.puts "\n\n" + ("=" * 80)
-              f.puts "[WRITE METHOD CALLED] Timestamp: #{Time.now}"
-              f.puts "destination_sync_mode: #{destination_sync_mode.inspect}"
-              f.puts "records.size: #{records.size}"
-              f.puts "table_id: #{table_id.inspect}"
-              f.puts "url: #{url.inspect}"
-              f.puts "First record sample: #{records.first.inspect}" if records.any?
-              f.puts ("=" * 80)
-            end
-
             log_message_array = []
             write_success = 0
             write_failure = 0
@@ -273,31 +261,12 @@ module Multiwoven
                 # Handle both string and symbol keys for field access
                 unique_value = record[destination_field] || record[destination_field.to_sym] || record[destination_field.to_s]
 
-                # DEBUG LOGGING
-                File.open("/tmp/airtable_debug.log", "a") do |f|
-                  f.puts "="*80
-                  f.puts "Timestamp: #{Time.now}"
-                  f.puts "destination_field: #{destination_field.inspect}"
-                  f.puts "use_record_id: #{use_record_id}"
-                  f.puts "record keys: #{record.keys.inspect}"
-                  f.puts "record: #{record.inspect}"
-                  f.puts "unique_value: #{unique_value.inspect}"
-                end
-
                 # If using recordId, the unique_value IS the Airtable record ID
                 airtable_id = if use_record_id
                                 unique_value
                               else
                                 lookup_index[unique_value]&.first
                               end
-
-                # DEBUG LOGGING
-                File.open("/tmp/airtable_debug.log", "a") do |f|
-                  f.puts "airtable_id: #{airtable_id.inspect}"
-                  f.puts "airtable_id.present?: #{airtable_id.present?}"
-                  f.puts "="*80
-                  f.puts ""
-                end
 
                 if airtable_id.present?
                   updates << { id: airtable_id, fields: filter_system_fields(record) }
@@ -379,31 +348,12 @@ module Multiwoven
                 # Handle both string and symbol keys for field access
                 unique_value = record[destination_field] || record[destination_field.to_sym] || record[destination_field.to_s]
 
-                # DEBUG LOGGING
-                File.open("/tmp/airtable_debug.log", "a") do |f|
-                  f.puts "="*80
-                  f.puts "[UPDATE] Timestamp: #{Time.now}"
-                  f.puts "destination_field: #{destination_field.inspect}"
-                  f.puts "use_record_id: #{use_record_id}"
-                  f.puts "record keys: #{record.keys.inspect}"
-                  f.puts "record: #{record.inspect}"
-                  f.puts "unique_value: #{unique_value.inspect}"
-                end
-
                 # If using recordId, the unique_value IS the Airtable record ID
                 airtable_id = if use_record_id
                                 unique_value
                               else
                                 lookup_index[unique_value]&.first
                               end
-
-                # DEBUG LOGGING
-                File.open("/tmp/airtable_debug.log", "a") do |f|
-                  f.puts "airtable_id: #{airtable_id.inspect}"
-                  f.puts "airtable_id.present?: #{airtable_id.present?}"
-                  f.puts "="*80
-                  f.puts ""
-                end
 
                 if airtable_id.present?
                   updates << { id: airtable_id, fields: filter_system_fields(record) }
