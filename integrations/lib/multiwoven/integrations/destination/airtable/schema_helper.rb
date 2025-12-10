@@ -20,6 +20,13 @@ module Multiwoven
               props[name] = schema
             end
 
+            # Add recordId as a virtual field (Airtable system field)
+            # This allows users to use recordId as a unique identifier for updates
+            properties["recordId"] = SCHEMA_TYPES[:STRING].merge({
+              "description" => "Airtable record ID (system field)",
+              "x_airtable" => { "system_field" => true }
+            })
+
             build_schema(properties)
           end
 

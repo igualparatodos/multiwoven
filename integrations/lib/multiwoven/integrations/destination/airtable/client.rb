@@ -74,6 +74,18 @@ module Multiwoven
 
             destination_sync_mode = sync_config.destination_sync_mode
 
+            # DEBUG LOGGING - Entry point
+            File.open("/tmp/airtable_debug.log", "a") do |f|
+              f.puts "\n\n" + ("=" * 80)
+              f.puts "[WRITE METHOD CALLED] Timestamp: #{Time.now}"
+              f.puts "destination_sync_mode: #{destination_sync_mode.inspect}"
+              f.puts "records.size: #{records.size}"
+              f.puts "table_id: #{table_id.inspect}"
+              f.puts "url: #{url.inspect}"
+              f.puts "First record sample: #{records.first.inspect}" if records.any?
+              f.puts ("=" * 80)
+            end
+
             log_message_array = []
             write_success = 0
             write_failure = 0
@@ -122,7 +134,7 @@ module Multiwoven
             {
               "records" => records.map do |record|
                 {
-                  "fields" => record
+                  "fields" => filter_system_fields(record)
                 }
               end
             }
@@ -221,27 +233,36 @@ module Multiwoven
             write_success = 0
             write_failure = 0
 
+            # Skip lookup table if using recordId as unique identifier
+            # In this case, records already contain the Airtable record ID
+            use_record_id = destination_field.to_s.downcase == "recordid"
+
             # Initialize or retrieve lookup cache for this sync run (thread-safe)
+            # Skip caching if using recordId since we don't need a lookup table
             cache_key = "#{sync_config.sync_run_id}_#{table_id}_#{destination_field}"
 
-            lookup_index = @cache_mutex.synchronize do
-              if @sync_run_lookup_cache[cache_key]
-                # Return a copy to avoid concurrent modification
-                @sync_run_lookup_cache[cache_key].dup
-              else
-                # Build FULL lookup index by scanning entire Airtable table once
-                resolver = ReverseEtl::Transformers::DestinationHandlers::Airtable::LinkResolver.new(
-                  api_key: api_key,
-                  base_id: base_id
-                )
-                new_index = resolver.build_full_index(
-                  linked_table_id: table_id,
-                  match_field: destination_field
-                )
-                @sync_run_lookup_cache[cache_key] = new_index
-                new_index.dup
-              end
-            end
+            lookup_index = if use_record_id
+                             nil
+                           else
+                             @cache_mutex.synchronize do
+                               if @sync_run_lookup_cache[cache_key]
+                                 # Return a copy to avoid concurrent modification
+                                 @sync_run_lookup_cache[cache_key].dup
+                               else
+                                 # Build FULL lookup index by scanning entire Airtable table once
+                                 resolver = ReverseEtl::Transformers::DestinationHandlers::Airtable::LinkResolver.new(
+                                   api_key: api_key,
+                                   base_id: base_id
+                                 )
+                                 new_index = resolver.build_full_index(
+                                   linked_table_id: table_id,
+                                   match_field: destination_field
+                                 )
+                                 @sync_run_lookup_cache[cache_key] = new_index
+                                 new_index.dup
+                               end
+                             end
+                           end
 
             records.each_slice(MAX_CHUNK_SIZE) do |chunk|
               creates = []
@@ -249,13 +270,39 @@ module Multiwoven
 
               # Separate records into creates vs updates
               chunk.each do |record|
-                unique_value = record[destination_field]  # Records are already transformed, use destination field
-                airtable_id = lookup_index[unique_value]&.first
+                # Handle both string and symbol keys for field access
+                unique_value = record[destination_field] || record[destination_field.to_sym] || record[destination_field.to_s]
 
-                if airtable_id
-                  updates << { id: airtable_id, fields: record }
+                # DEBUG LOGGING
+                File.open("/tmp/airtable_debug.log", "a") do |f|
+                  f.puts "="*80
+                  f.puts "Timestamp: #{Time.now}"
+                  f.puts "destination_field: #{destination_field.inspect}"
+                  f.puts "use_record_id: #{use_record_id}"
+                  f.puts "record keys: #{record.keys.inspect}"
+                  f.puts "record: #{record.inspect}"
+                  f.puts "unique_value: #{unique_value.inspect}"
+                end
+
+                # If using recordId, the unique_value IS the Airtable record ID
+                airtable_id = if use_record_id
+                                unique_value
+                              else
+                                lookup_index[unique_value]&.first
+                              end
+
+                # DEBUG LOGGING
+                File.open("/tmp/airtable_debug.log", "a") do |f|
+                  f.puts "airtable_id: #{airtable_id.inspect}"
+                  f.puts "airtable_id.present?: #{airtable_id.present?}"
+                  f.puts "="*80
+                  f.puts ""
+                end
+
+                if airtable_id.present?
+                  updates << { id: airtable_id, fields: filter_system_fields(record) }
                 else
-                  creates << record
+                  creates << filter_system_fields(record)
                 end
               end
 
@@ -267,7 +314,8 @@ module Multiwoven
                 log_message_array.concat(result[:logs])
 
                 # Update lookup_index with newly created records to prevent duplicates in subsequent batches
-                if result[:created_records]
+                # Skip this if using recordId since we don't maintain a lookup table
+                if !use_record_id && result[:created_records]
                   result[:created_records].each do |created_record|
                     unique_value = created_record["fields"][destination_field]
                     record_id = created_record["id"]
@@ -292,8 +340,11 @@ module Multiwoven
             end
 
             # Save updated lookup_index back to cache for next batch (thread-safe)
-            @cache_mutex.synchronize do
-              @sync_run_lookup_cache[cache_key] = lookup_index
+            # Skip this if using recordId since we don't maintain a lookup table
+            unless use_record_id
+              @cache_mutex.synchronize do
+                @sync_run_lookup_cache[cache_key] = lookup_index
+              end
             end
 
             [write_success, write_failure, log_message_array]
@@ -316,17 +367,46 @@ module Multiwoven
             source_field = unique_config["source_field"]
             destination_field = unique_config["destination_field"]
 
-            lookup_index = build_lookup_index(records, destination_field, destination_field, api_key, base_id, table_id)
+            # Skip lookup table if using recordId as unique identifier
+            # In this case, records already contain the Airtable record ID
+            use_record_id = destination_field.to_s.downcase == "recordid"
+            lookup_index = use_record_id ? nil : build_lookup_index(records, destination_field, destination_field, api_key, base_id, table_id)
 
             records.each_slice(MAX_CHUNK_SIZE) do |chunk|
               updates = []
 
               chunk.each do |record|
-                unique_value = record[destination_field]  # Records are already transformed, use destination field
-                airtable_id = lookup_index[unique_value]&.first
+                # Handle both string and symbol keys for field access
+                unique_value = record[destination_field] || record[destination_field.to_sym] || record[destination_field.to_s]
 
-                if airtable_id
-                  updates << { id: airtable_id, fields: record }
+                # DEBUG LOGGING
+                File.open("/tmp/airtable_debug.log", "a") do |f|
+                  f.puts "="*80
+                  f.puts "[UPDATE] Timestamp: #{Time.now}"
+                  f.puts "destination_field: #{destination_field.inspect}"
+                  f.puts "use_record_id: #{use_record_id}"
+                  f.puts "record keys: #{record.keys.inspect}"
+                  f.puts "record: #{record.inspect}"
+                  f.puts "unique_value: #{unique_value.inspect}"
+                end
+
+                # If using recordId, the unique_value IS the Airtable record ID
+                airtable_id = if use_record_id
+                                unique_value
+                              else
+                                lookup_index[unique_value]&.first
+                              end
+
+                # DEBUG LOGGING
+                File.open("/tmp/airtable_debug.log", "a") do |f|
+                  f.puts "airtable_id: #{airtable_id.inspect}"
+                  f.puts "airtable_id.present?: #{airtable_id.present?}"
+                  f.puts "="*80
+                  f.puts ""
+                end
+
+                if airtable_id.present?
+                  updates << { id: airtable_id, fields: filter_system_fields(record) }
                 else
                   # Record not found - log as failure
                   write_failure += 1
@@ -436,6 +516,12 @@ module Multiwoven
             else
               nil
             end
+          end
+
+          def filter_system_fields(record)
+            # Remove Airtable system fields (read-only) from the record
+            # recordId should not be sent as a field in create/update requests
+            record.reject { |key, _| key.to_s.downcase == "recordid" }
           end
 
         end
